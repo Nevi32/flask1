@@ -1,0 +1,29 @@
+{
+    "version": 2,
+    "builds": [
+      {
+        "src": "api/**/*.py",
+        "use": "@vercel/python"
+      }
+    ],
+    "routes": [
+      {
+        "src": "/api/(.*)",
+        "dest": "/api/$1"
+      }
+    ],
+    "functions": {
+      "api/send-sms.py": {
+        "maxDuration": 30
+      },
+      "api/get-balance.py": {
+        "maxDuration": 15
+      },
+      "api/validate-mobile.py": {
+        "maxDuration": 15
+      },
+      "api/health.py": {
+        "maxDuration": 5
+      }
+    }
+  }
