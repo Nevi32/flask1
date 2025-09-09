@@ -1,43 +1,36 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS
 import requests
 import json
 
 app = Flask(__name__)
-CORS(app)
 
 # MobiTech API base URL
 MOBITECH_BASE_URL = "https://app.mobitechtechnologies.com/sms"
 
-def handler(request):
-    """
-    Get account balance via MobiTech API
-    Expected JSON payload:
-    {
-        "api_key": "your_api_key",
-        "response_type": "json"
-    }
-    """
-    if request.method != 'POST':
-        return jsonify({
-            "error": "Method not allowed",
-            "message": "Only POST requests are allowed"
-        }), 405
+@app.route('/api/get-balance', methods=['POST', 'OPTIONS'])
+def get_balance():
+    # Handle CORS preflight
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        return response
     
     try:
         # Get data from request
         data = request.get_json()
         
         if not data:
-            return jsonify({
-                "error": "No JSON data provided"
-            }), 400
+            response = jsonify({"error": "No JSON data provided"})
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            return response, 400
         
         # Validate required fields
         if 'api_key' not in data or not data['api_key']:
-            return jsonify({
-                "error": "Missing required field: api_key"
-            }), 400
+            response = jsonify({"error": "Missing required field: api_key"})
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            return response, 400
         
         # Prepare payload for MobiTech API
         mobitech_payload = {
@@ -51,7 +44,7 @@ def handler(request):
         }
         
         # Make request to MobiTech API
-        response = requests.get(
+        response_data = requests.get(
             f"{MOBITECH_BASE_URL}/getbalance",
             headers=headers,
             json=mobitech_payload,
@@ -59,28 +52,36 @@ def handler(request):
         )
         
         # Return the response from MobiTech
-        if response.status_code == 200:
-            return jsonify(response.json())
+        response = jsonify(response_data.json())
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        
+        if response_data.status_code == 200:
+            return response
         else:
-            return jsonify({
+            error_response = jsonify({
                 "error": "Balance API request failed",
-                "status_code": response.status_code,
-                "response": response.text
-            }), response.status_code
+                "status_code": response_data.status_code,
+                "response": response_data.text
+            })
+            error_response.headers.add('Access-Control-Allow-Origin', '*')
+            return error_response, response_data.status_code
             
     except requests.exceptions.Timeout:
-        return jsonify({
-            "error": "Request timeout - Balance service took too long to respond"
-        }), 408
+        response = jsonify({"error": "Request timeout - Balance service took too long to respond"})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response, 408
     
     except requests.exceptions.RequestException as e:
-        return jsonify({
-            "error": "Failed to connect to balance service",
-            "details": str(e)
-        }), 500
+        response = jsonify({"error": "Failed to connect to balance service", "details": str(e)})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response, 500
     
     except Exception as e:
-        return jsonify({
-            "error": "Internal server error",
-            "details": str(e)
-        }), 500
+        response = jsonify({"error": "Internal server error", "details": str(e)})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response, 500
+
+# For Vercel serverless functions
+def handler(request):
+    with app.test_request_context(request.path, method=request.method, headers=dict(request.headers), data=request.data):
+        return app.dispatch_request()
