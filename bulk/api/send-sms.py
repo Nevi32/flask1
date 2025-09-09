@@ -1,48 +1,38 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS
 import requests
 import json
 
 app = Flask(__name__)
-CORS(app)
 
 # MobiTech API base URL
 MOBITECH_BASE_URL = "https://app.mobitechtechnologies.com/sms"
 
-def handler(request):
-    """
-    Send SMS via MobiTech API
-    Expected JSON payload:
-    {
-        "api_key": "your_api_key",
-        "mobile": "+254712345678",
-        "message": "Your message",
-        "sender_name": "BULK_SMS",
-        "service_id": 0
-    }
-    """
-    if request.method != 'POST':
-        return jsonify({
-            "error": "Method not allowed",
-            "message": "Only POST requests are allowed"
-        }), 405
+@app.route('/api/send-sms', methods=['POST', 'OPTIONS'])
+def send_sms():
+    # Handle CORS preflight
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        return response
     
     try:
         # Get data from request
         data = request.get_json()
         
         if not data:
-            return jsonify({
-                "error": "No JSON data provided"
-            }), 400
+            response = jsonify({"error": "No JSON data provided"})
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            return response, 400
         
         # Validate required fields
         required_fields = ['api_key', 'mobile', 'message', 'sender_name']
         for field in required_fields:
             if field not in data or not data[field]:
-                return jsonify({
-                    "error": f"Missing required field: {field}"
-                }), 400
+                response = jsonify({"error": f"Missing required field: {field}"})
+                response.headers.add('Access-Control-Allow-Origin', '*')
+                return response, 400
         
         # Prepare payload for MobiTech API
         mobitech_payload = {
@@ -60,7 +50,7 @@ def handler(request):
         }
         
         # Make request to MobiTech API
-        response = requests.post(
+        response_data = requests.post(
             f"{MOBITECH_BASE_URL}/sendsms",
             headers=headers,
             json=mobitech_payload,
@@ -68,28 +58,36 @@ def handler(request):
         )
         
         # Return the response from MobiTech
-        if response.status_code == 200:
-            return jsonify(response.json())
+        response = jsonify(response_data.json())
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        
+        if response_data.status_code == 200:
+            return response
         else:
-            return jsonify({
+            error_response = jsonify({
                 "error": "SMS API request failed",
-                "status_code": response.status_code,
-                "response": response.text
-            }), response.status_code
+                "status_code": response_data.status_code,
+                "response": response_data.text
+            })
+            error_response.headers.add('Access-Control-Allow-Origin', '*')
+            return error_response, response_data.status_code
             
     except requests.exceptions.Timeout:
-        return jsonify({
-            "error": "Request timeout - SMS service took too long to respond"
-        }), 408
+        response = jsonify({"error": "Request timeout - SMS service took too long to respond"})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response, 408
     
     except requests.exceptions.RequestException as e:
-        return jsonify({
-            "error": "Failed to connect to SMS service",
-            "details": str(e)
-        }), 500
+        response = jsonify({"error": "Failed to connect to SMS service", "details": str(e)})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response, 500
     
     except Exception as e:
-        return jsonify({
-            "error": "Internal server error",
-            "details": str(e)
-        }), 500
+        response = jsonify({"error": "Internal server error", "details": str(e)})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response, 500
+
+# For Vercel serverless functions
+def handler(request):
+    with app.test_request_context(request.path, method=request.method, headers=dict(request.headers), data=request.data):
+        return app.dispatch_request()
